@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
-import { lessons } from '../data/lessons';
+import { useState, useCallback, useEffect } from 'react';
+import { lessons as localLessons } from '../data/lessons';
+import { supabase, supabaseEnabled } from '../lib/supabase';
 import { SESSION_LENGTH, FAST_THRESHOLD_MS } from '../utils/scoring';
 
 const EXERCISE_TYPES = ['multiple-choice', 'listen-translate'];
@@ -14,33 +15,48 @@ function shuffle(arr) {
 }
 
 function pickDistractors(correct, pool, count = 3) {
-  const others = pool.filter(l => l.id !== correct.id);
-  return shuffle(others).slice(0, count).map(l => l.english);
+  return shuffle(pool.filter(l => l.id !== correct.id)).slice(0, count).map(l => l.english);
 }
 
-function buildQuestion(lesson, pool) {
-  const type = EXERCISE_TYPES[Math.floor(Math.random() * EXERCISE_TYPES.length)];
-  const distractors = pickDistractors(lesson, pool);
-  const choices = shuffle([lesson.english, ...distractors]);
-  return { lesson, type, choices };
-}
-
-// TODO: fetch from Supabase — replace `lessons` with an API call filtered by difficulty
-function buildSession(difficulty = 'advanced_beginner') {
-  const pool = lessons.filter(l => l.difficulty === difficulty);
+function buildQuestions(pool) {
   const selected = shuffle(pool).slice(0, SESSION_LENGTH);
-  return selected.map(lesson => buildQuestion(lesson, pool));
+  return selected.map(lesson => ({
+    lesson,
+    type: EXERCISE_TYPES[Math.floor(Math.random() * EXERCISE_TYPES.length)],
+    choices: shuffle([lesson.english, ...pickDistractors(lesson, pool)]),
+  }));
+}
+
+// TODO: fetch from Supabase — replace localLessons with Supabase query below
+async function fetchLessons(difficulty = 'advanced_beginner') {
+  if (supabaseEnabled) {
+    const { data, error } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('difficulty', difficulty);
+    if (!error && data?.length > 0) return data;
+  }
+  // Fallback to hardcoded local data
+  return localLessons.filter(l => l.difficulty === difficulty);
 }
 
 export function useSession() {
-  const [questions, setQuestions] = useState(() => buildSession());
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState([]); // { correct: bool, fast: bool }
-  const [phase, setPhase] = useState('question'); // 'question' | 'feedback' | 'summary'
+  const [answers, setAnswers] = useState([]);
+  const [phase, setPhase] = useState('question');
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
 
+  useEffect(() => {
+    fetchLessons().then(pool => {
+      setQuestions(buildQuestions(pool));
+      setLoading(false);
+    });
+  }, []);
+
   const currentQuestion = questions[currentIndex] ?? null;
-  const isComplete = phase === 'summary';
+  const isComplete = !loading && phase === 'summary';
 
   const submitAnswer = useCallback((userAnswer) => {
     if (phase !== 'question') return;
@@ -62,23 +78,27 @@ export function useSession() {
   }, [currentIndex, questions.length]);
 
   const restartSession = useCallback(() => {
-    setQuestions(buildSession());
-    setCurrentIndex(0);
-    setAnswers([]);
-    setPhase('question');
-    setQuestionStartTime(Date.now());
+    setLoading(true);
+    fetchLessons().then(pool => {
+      setQuestions(buildQuestions(pool));
+      setCurrentIndex(0);
+      setAnswers([]);
+      setPhase('question');
+      setQuestionStartTime(Date.now());
+      setLoading(false);
+    });
   }, []);
 
   const correctCount = answers.filter(a => a.correct).length;
   const fastCount = answers.filter(a => a.fast).length;
 
-  // Streak: count of consecutive correct answers from the end
   let streak = 0;
   for (let i = answers.length - 1; i >= 0; i--) {
     if (answers[i].correct) streak++; else break;
   }
 
   return {
+    loading,
     questions,
     currentIndex,
     currentQuestion,
