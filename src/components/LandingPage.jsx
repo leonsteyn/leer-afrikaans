@@ -1,6 +1,6 @@
 import { CATEGORY_COLORS } from '../data/lessons';
 
-const HUB_URL = 'https://mrssteyngames.netlify.app';
+const HUB_URL = 'https://mrssteynsgames.netlify.app';
 
 const CATEGORIES = [
   { name: 'Greetings',     icon: '👋' },

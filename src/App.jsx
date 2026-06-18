@@ -8,7 +8,7 @@ import ExerciseCard from './components/ExerciseCard';
 import SessionSummary from './components/SessionSummary';
 import LandingPage from './components/LandingPage';
 
-const HUB_URL = 'https://mrssteyngames.netlify.app';
+const HUB_URL = 'https://mrssteynsgames.netlify.app';
 
 export default function App() {
   const [appPhase, setAppPhase] = useState('home'); // 'home' | 'playing'
