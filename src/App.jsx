@@ -12,7 +12,6 @@ export default function App() {
   const score = useScore();
 
   const {
-    loading,
     questions, currentIndex, currentQuestion, answers,
     phase, isComplete, streak, correctCount, fastCount,
     submitAnswer, nextQuestion, restartSession, setQuestionStartTime,
@@ -31,17 +30,6 @@ export default function App() {
   useEffect(() => {
     if (phase === 'question') setQuestionStartTime(Date.now());
   }, [currentIndex, phase, setQuestionStartTime]);
-
-  if (loading || !score.ready) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-sky-50 to-violet-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-5xl mb-4 animate-bounce">🇿🇦</div>
-          <p className="text-gray-500 font-medium">Laai lesse...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-sky-50 to-violet-50 flex flex-col">
