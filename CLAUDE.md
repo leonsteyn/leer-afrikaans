@@ -4,15 +4,25 @@ A Duolingo-style Afrikaans ↔ English learning app built as a React/Vite POC fo
 
 ---
 
+## Links
+
+| Resource | URL |
+|----------|-----|
+| GitHub repo | https://github.com/leonsteyn/leer-afrikaans |
+| Mrs Steyn's Games hub | https://mrssteynsgames.netlify.app |
+| Netlify deployment | TBC — update hub tile in `leon-games/index.html` once known |
+
+---
+
 ## Tech Stack
 
-| Layer       | Technology                          |
-|-------------|-------------------------------------|
-| Framework   | React 19 + Vite                     |
+| Layer       | Technology |
+|-------------|------------|
+| Framework   | React 19 + Vite |
 | Styling     | Tailwind CSS v4 (via @tailwindcss/vite plugin) |
-| TTS         | Browser Web Speech API (SpeechSynthesis) |
-| Persistence | localStorage (to be replaced with Supabase) |
-| Hosting     | Netlify (netlify.toml included)     |
+| TTS         | Pre-recorded MP3/M4A files with Web Speech API fallback |
+| Persistence | localStorage (designed to swap to Supabase — see below) |
+| Hosting     | Netlify (`netlify.toml` included) |
 
 ---
 
@@ -21,58 +31,92 @@ A Duolingo-style Afrikaans ↔ English learning app built as a React/Vite POC fo
 ```
 src/
   components/
-    ExerciseCard.jsx      # Master card component — selects exercise subtype
+    LandingPage.jsx       # Home screen — hero, category tiles, Start button
+    ExerciseCard.jsx      # Master card — routes to correct exercise subtype
     MultipleChoice.jsx    # Pick correct English from 4 options
-    TypeAnswer.jsx        # Type the English translation
-    ListenTranslate.jsx   # Auto-plays Afrikaans audio, then pick answer
+    ListenTranslate.jsx   # Auto-plays audio, then multiple choice
     ProgressBar.jsx       # Top session progress bar
-    SessionSummary.jsx    # End-of-session score + stars + XP
+    SessionSummary.jsx    # End-of-session score + stars + XP + nav buttons
     ScoreDisplay.jsx      # Header XP, streak, best-score chips
   data/
     lessons.js            # 47 hardcoded Afrikaans/English pairs + category colours
+  lib/
+    supabase.js           # Supabase client (disabled until env vars are set)
   utils/
-    speech.js             # Web Speech API wrapper (af-ZA → af → fallback)
+    speech.js             # Audio file player with Web Speech API fallback
     scoring.js            # XP constants, star calculation, session length
   hooks/
     useSession.js         # Session state machine (question → feedback → summary)
     useScore.js           # Persistent XP + best score via localStorage
-  App.jsx                 # Root layout — header, progress, exercise, summary
+  App.jsx                 # Root — manages 'home' | 'playing' app phases
   main.jsx                # React entry point
   index.css               # Tailwind import + base reset
+
+supabase/
+  migration.sql           # Schema + seed data for future Supabase migration
+
+public/
+  audio/                  # Pre-recorded M4A/MP3 files named by lesson id (e.g. g1.m4a)
+
+RECORDING_CHECKLIST.md    # All 47 phrases with filenames and phonetic hints
 ```
 
 ---
 
-## Key Design Decisions
+## App Flow
 
-### Session Flow
-`useSession` drives the state machine:
-- `'question'` → user sees the exercise
-- `'feedback'` → correct/incorrect banner shown, Continue button appears
-- `'summary'` → `SessionSummary` component takes over
+```
+Landing Page ('home')
+  ↓ Start Learning
+Game Session ('playing')
+  ↓ 10 questions (random mix of Multiple Choice + Listen & Translate)
+  ↓ Each question: 'question' → 'feedback' → next
+Session Summary
+  ↓ Try Again / New Session → back to game
+  ↓ Back to Mrs Steyn's Games → hub URL
+```
 
-A session is always 10 questions drawn randomly from the lesson pool.
+---
 
-### Exercise Types
-Three types are randomly assigned per question:
+## Exercise Types
+
+Only two types are active (type-answer was removed for this iteration):
+
 1. **multiple-choice** — 4 options (1 correct + 3 random distractors)
-2. **type-answer** — free-text input, case-insensitive match
-3. **listen-translate** — auto-plays TTS, then multiple-choice layout
+2. **listen-translate** — auto-plays TTS on mount, then multiple-choice layout
 
-### Scoring
-- 10 XP per correct answer
-- +5 XP speed bonus if answered in under 5 seconds
-- Stars: 3 = 9–10, 2 = 6–8, 1 = 3–5, 0 = 0–2
-- XP and best session score stored in `localStorage` under keys:
-  - `afrikaans_app_xp`
-  - `afrikaans_app_best_score`
+To re-enable type-answer, add `'type-answer'` back to `EXERCISE_TYPES` in `useSession.js`.
 
-### TTS (Speech)
-`src/utils/speech.js` uses `window.speechSynthesis`:
-- Tries `af-ZA` voice first, then `af`, then uses browser default with lang hint
-- Cancels any ongoing utterance before speaking a new one
-- Truncates text to 190 chars to avoid Chrome's TTS cutoff bug
-- `isAfrikaansVoiceAvailable()` returns a boolean for the UI warning indicator
+---
+
+## Audio / TTS
+
+`src/utils/speech.js` plays audio in this priority order:
+
+1. `public/audio/{id}.mp3`
+2. `public/audio/{id}.m4a`
+3. Web Speech API fallback (targets `af-ZA` voice, degrades gracefully)
+
+To add a recording: drop the file named `{id}.mp3` or `{id}.m4a` into `public/audio/`. No code changes needed. See `RECORDING_CHECKLIST.md` for all 47 phrases.
+
+**Current recording status:** g1–g8 recorded (Greetings complete). Remaining 39 phrases use Web Speech API fallback.
+
+---
+
+## Scoring
+
+| Event | XP |
+|-------|----|
+| Correct answer | +10 XP |
+| Answer in under 5 seconds | +5 XP bonus |
+
+Stars: 3 = 9–10 correct, 2 = 6–8, 1 = 3–5, 0 = 0–2
+
+End messages: Uitstekend (3⭐), Welgedaan (2⭐), Nie sleg nie (1⭐), Probeer weer (0⭐)
+
+XP and best session score stored in `localStorage`:
+- `afrikaans_app_xp`
+- `afrikaans_app_best_score`
 
 ---
 
@@ -85,7 +129,8 @@ Each lesson entry matches the intended Supabase `lessons` table schema:
   id: string,           // unique, e.g. 'g1'
   afrikaans: string,
   english: string,
-  category: string,     // 'Greetings' | 'Introductions' | 'Questions' | 'Responses' | 'Shopping' | 'Directions' | 'Food'
+  category: string,     // 'Greetings' | 'Introductions' | 'Questions' |
+                        // 'Responses' | 'Shopping' | 'Directions' | 'Food'
   difficulty: string,   // 'advanced_beginner' — the multi-level hook
   hint: string,         // phonetic tip or usage note
 }
@@ -95,53 +140,33 @@ Each lesson entry matches the intended Supabase `lessons` table schema:
 
 ---
 
-## Future-Proofing: Supabase Migration
+## Navigation
 
-### 1. Replace hardcoded data
-In `src/data/lessons.js`:
-```js
-// TODO: fetch from Supabase
-export const lessons = [ ... ];
-```
-Replace the export with a Supabase query:
-```js
-const { data } = await supabase
-  .from('lessons')
-  .select('*')
-  .eq('difficulty', 'advanced_beginner');
-```
+| Location | Action | Destination |
+|----------|--------|-------------|
+| Landing page header | ← link | `mrssteynsgames.netlify.app` |
+| Game header | ← button | Landing page |
+| Session summary | Back to Mrs Steyn's Games | `mrssteynsgames.netlify.app` |
+| Session summary | Try Again / New Session | New game session |
 
-In `src/hooks/useSession.js`:
-```js
-// TODO: fetch from Supabase — replace `lessons` with an API call filtered by difficulty
-const pool = lessons.filter(l => l.difficulty === difficulty);
-```
+`HUB_URL` is defined in both `src/App.jsx` and `src/components/LandingPage.jsx`.
 
-### 2. Replace localStorage with Supabase user profiles
-In `src/hooks/useScore.js`:
-```js
-// TODO: swap localStorage reads/writes for Supabase user profile calls
-```
-Replace `localStorage.getItem/setItem` with Supabase upsert on a `user_profiles` table:
-```js
-await supabase.from('user_profiles').upsert({ user_id, xp: totalXp, best_score: bestScore });
-```
+---
 
-### 3. Add authentication
-- Wrap the app in a Supabase `Auth` provider
-- Gate the main game behind a login screen
-- Pull user XP/bestScore from the profile on mount
+## Hub Page Integration
 
-### 4. Multi-level support
-- `difficulty` field on each lesson is the filter hook
-- Add a level selector screen that sets difficulty before `buildSession()`
-- New levels: add rows with `difficulty: 'intermediate'` or `'advanced'` to Supabase
+The Leer Afrikaans tile is in `leon-games/index.html`. Once the Netlify URL is confirmed, update:
+
+```html
+<a class="card" href="https://YOUR-NETLIFY-URL.netlify.app">
+```
 
 ---
 
 ## Deployment (Netlify)
 
 `netlify.toml` is already configured:
+
 ```toml
 [build]
   command = "npm run build"
@@ -153,10 +178,13 @@ await supabase.from('user_profiles').upsert({ user_id, xp: totalXp, best_score: 
   status = 200
 ```
 
-Steps:
-1. Push to GitHub
-2. Connect repo in Netlify dashboard
-3. Deploy — no env vars needed for the POC
+**Steps:**
+1. Go to app.netlify.com → Add new site → Import from GitHub
+2. Select `leonsteyn/leer-afrikaans`
+3. Build command: `npm run build` · Publish directory: `dist`
+4. Deploy — no environment variables needed
+5. Set site name to `leer-afrikaans` for a clean URL
+6. Update `leon-games/index.html` hub tile with the confirmed URL
 
 ---
 
@@ -168,26 +196,30 @@ npm run dev
 # → http://localhost:5173
 ```
 
-Build for production:
-```bash
-npm run build
-npm run preview
-```
-
 ---
 
-## Known Limitations (POC)
+## Future: Supabase Migration
 
-- TTS quality depends on the user's OS/browser. macOS Safari has the best Afrikaans voice.
-- `'af-ZA'` voice is not available on all platforms; the app falls back gracefully.
-- No user accounts — XP resets if localStorage is cleared.
-- Session always picks from all 47 lessons randomly; no spaced repetition yet.
+`supabase/migration.sql` contains the full schema and seed data ready to run.
+`src/lib/supabase.js` is already wired up — it activates when env vars are set.
+
+### Steps when ready:
+
+1. Create a Supabase project at supabase.com
+2. Run `supabase/migration.sql` in the SQL Editor
+3. Enable **Anonymous sign-ins** under Authentication → Providers
+4. Add env vars to Netlify dashboard:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+5. Update `src/hooks/useScore.js` — swap localStorage calls for Supabase upsert on `user_profiles`
+6. Update `src/hooks/useSession.js` — swap `localLessons` for Supabase query (TODO comment already in place)
+
+### Multi-level support
+The `difficulty` field on each lesson is the filter hook. Add a level selector screen that sets difficulty before `buildSession()`. New levels = new rows in Supabase with `difficulty: 'intermediate'` etc.
 
 ---
 
 ## Part of Mrs Steyn's Games
 
-This app is designed to slot into the Mrs Steyn's Games suite. The footer already carries the branding. When integrating:
-- Adopt the shared colour palette / design tokens from the parent project
-- Wire up shared auth/user profiles
-- Link from the games hub to `/` of this app (or embed as a route)
+Hub: https://mrssteynsgames.netlify.app  
+This app links back to the hub from the landing page header and the session summary screen.
