@@ -1,6 +1,6 @@
 import { calcStars, calcXp, SESSION_LENGTH } from '../utils/scoring';
 
-export default function SessionSummary({ correctCount, fastCount, totalXp, bestScore, onRetry, onNew }) {
+export default function SessionSummary({ correctCount, fastCount, totalXp, bestScore, onRetry, onNew, onHome }) {
   const stars = calcStars(correctCount);
   const sessionXp = calcXp(correctCount, fastCount);
 
@@ -64,6 +64,12 @@ export default function SessionSummary({ correctCount, fastCount, totalXp, bestS
           🆕 New Session
         </button>
       </div>
+      <button
+        onClick={onHome}
+        className="w-full mt-2 text-gray-400 hover:text-gray-600 text-sm py-2 transition-colors cursor-pointer"
+      >
+        ← Back to Mrs Steyn&apos;s Games
+      </button>
     </div>
   );
 }

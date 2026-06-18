@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from './hooks/useSession';
 import { useScore } from './hooks/useScore';
 import { calcXp } from './utils/scoring';
@@ -6,8 +6,12 @@ import ProgressBar from './components/ProgressBar';
 import ScoreDisplay from './components/ScoreDisplay';
 import ExerciseCard from './components/ExerciseCard';
 import SessionSummary from './components/SessionSummary';
+import LandingPage from './components/LandingPage';
+
+const HUB_URL = 'https://mrssteyngames.netlify.app';
 
 export default function App() {
+  const [appPhase, setAppPhase] = useState('home'); // 'home' | 'playing'
   const session = useSession();
   const score = useScore();
 
@@ -31,15 +35,49 @@ export default function App() {
     if (phase === 'question') setQuestionStartTime(Date.now());
   }, [currentIndex, phase, setQuestionStartTime]);
 
+  function handleStart() {
+    restartSession();
+    setAppPhase('playing');
+  }
+
+  function handleRetry() {
+    restartSession();
+    setAppPhase('playing');
+  }
+
+  function handleHome() {
+    setAppPhase('home');
+  }
+
+  if (appPhase === 'home') {
+    return (
+      <LandingPage
+        totalXp={score.totalXp}
+        bestScore={score.bestScore}
+        onStart={handleStart}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-sky-50 to-violet-50 flex flex-col">
+      {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🇿🇦</span>
-            <div className="text-left">
-              <h1 className="text-lg font-bold text-gray-800 leading-tight">Leer Afrikaans</h1>
-              <p className="text-xs text-gray-400">Advanced Beginner</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleHome}
+              className="text-gray-400 hover:text-gray-600 transition-colors text-xl cursor-pointer"
+              title="Back to home"
+            >
+              ←
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🇿🇦</span>
+              <div className="text-left">
+                <h1 className="text-lg font-bold text-gray-800 leading-tight">Leer Afrikaans</h1>
+                <p className="text-xs text-gray-400">Advanced Beginner</p>
+              </div>
             </div>
           </div>
           <ScoreDisplay totalXp={score.totalXp} streak={streak} bestScore={score.bestScore} />
@@ -76,8 +114,9 @@ export default function App() {
             fastCount={fastCount}
             totalXp={score.totalXp}
             bestScore={score.bestScore}
-            onRetry={restartSession}
-            onNew={restartSession}
+            onRetry={handleRetry}
+            onNew={handleRetry}
+            onHome={handleHome}
           />
         )}
       </main>
